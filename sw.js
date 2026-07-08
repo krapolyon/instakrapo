@@ -1,5 +1,5 @@
 // Instakrapo service worker — bump the version to force an update after edits
-const CACHE = 'instakrapo-v7';
+const CACHE = 'instakrapo-v8';
 const ASSETS = [
   './',
   './index.html',
