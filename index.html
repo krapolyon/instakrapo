@@ -129,7 +129,7 @@
       </div>
     </div>
 
-    <button class="btn btn-gold" id="dlBtn" disabled>⬇&nbsp; Télécharger le post</button>
+    <button class="btn btn-gold" id="dlBtn" style="margin-top:14px" disabled>⬇&nbsp; Enregistrer / Partager</button>
     <input type="file" id="fileIn" accept="image/*" style="display:none">
 
     <div class="slider-field">
@@ -299,8 +299,8 @@ function clampDraw(){
 let rafPending=false;
 function scheduleRender(){ if(rafPending) return; rafPending=true; requestAnimationFrame(()=>{rafPending=false; render();}); }
 
-async function render(){
-  await ensureFonts();
+let fontsReady=false;
+function paint(){
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='#111'; ctx.fillRect(0,0,W,H);
 
@@ -309,6 +309,11 @@ async function render(){
     drawFrosted();
   }
   drawText();
+}
+async function render(){
+  await ensureFonts();
+  fontsReady=true;
+  paint();
 }
 
 function drawFrosted(){
@@ -332,8 +337,8 @@ function drawFrosted(){
   const g=o.createLinearGradient(0,bandTop-feather,0,bandTop+feather);
   g.addColorStop(0,'rgba(0,0,0,0)');
   g.addColorStop(1,'rgba(0,0,0,1)');
-  o.fillStyle=g; o.fillRect(0,bandTop-feather,W,feather*2);
-  o.fillStyle='#000'; o.fillRect(0,bandTop+feather,W,H-(bandTop+feather));
+  o.fillStyle=g;
+  o.fillRect(0, bandTop-feather, W, H-(bandTop-feather));
   o.globalCompositeOperation='source-over';
 
   ctx.drawImage(off,0,0);
@@ -561,19 +566,31 @@ bindSlider('trk','trk');
 $('fontSel').addEventListener('change', e=>{ opts.font=e.target.value; scheduleRender(); });
 $('txtColor').addEventListener('input', e=>{ opts.txt=e.target.value; scheduleRender(); });
 
-// download
-$('dlBtn').addEventListener('click', ()=>{
+// export: iOS/mobile share sheet (Enregistrer l'image → galerie, ou Instagram),
+// with a plain download fallback on desktop
+function fileName(){
+  const safe=(opts.city||'post').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase();
+  return `${safe||'post'}-jour${opts.day||'x'}.png`;
+}
+function dataURLtoFile(dataURL, name){
+  const [head,b64]=dataURL.split(',');
+  const mime=(head.match(/:(.*?);/)||[])[1]||'image/png';
+  const bin=atob(b64); const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new File([arr], name, {type:mime});
+}
+$('dlBtn').addEventListener('click', async ()=>{
   if(!img) return;
-  render().then(()=>{
-    canvas.toBlob(blob=>{
-      const a=document.createElement('a');
-      const safe=(opts.city||'post').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase();
-      a.download = `${safe||'post'}-jour${opts.day||'x'}.png`;
-      a.href=URL.createObjectURL(blob);
-      a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-    }, 'image/png');
-  });
+  if(fontsReady) paint(); else await render();   // keep canvas current; stay in gesture when possible
+  const name = fileName();
+  const dataURL = canvas.toDataURL('image/png');
+  const file = dataURLtoFile(dataURL, name);
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({ files:[file], title: opts.city||'Instakrapo' }); return; }
+    catch(err){ if(err && err.name==='AbortError') return; }
+  }
+  const a=document.createElement('a');
+  a.download=name; a.href=dataURL; a.click();
 });
 
 // initial paint
