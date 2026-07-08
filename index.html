@@ -327,15 +327,27 @@ function drawFrosted(){
 
   const off = document.createElement('canvas'); off.width=W; off.height=H;
   const o = off.getContext('2d');
-  // blurred copy of the same photo, slightly overscanned to avoid edge halo
-  o.filter = `blur(${opts.blur}px)`;
-  const pad = opts.blur*1.4;
-  o.drawImage(img, drawX-pad, drawY-pad, drawW+pad*2, drawH+pad*2);
-  o.filter='none';
+  o.drawImage(img, drawX, drawY, drawW, drawH);
+  // iOS-safe blur: downscale then upscale with smoothing.
+  // (canvas ctx.filter='blur()' is unreliable on Safari iOS, so we avoid it.)
+  if(opts.blur > 0){
+    const f = Math.max(2, opts.blur);
+    const sw = Math.max(4, Math.round(W/f));
+    const sh = Math.max(4, Math.round(H/f));
+    const c1=document.createElement('canvas'); c1.width=sw; c1.height=sh;
+    const x1=c1.getContext('2d'); x1.imageSmoothingEnabled=true; x1.imageSmoothingQuality='high';
+    x1.drawImage(off,0,0,sw,sh);
+    const c2=document.createElement('canvas'); c2.width=sw; c2.height=sh;
+    const x2=c2.getContext('2d'); x2.imageSmoothingEnabled=true; x2.imageSmoothingQuality='high';
+    x2.drawImage(c1,0,0,sw,sh);           // second pass = smoother blur
+    o.clearRect(0,0,W,H);
+    o.imageSmoothingEnabled=true; o.imageSmoothingQuality='high';
+    o.drawImage(c2,0,0,sw,sh,0,0,W,H);
+  }
   // white veil
   o.fillStyle = `rgba(255,255,255,${opts.tint/100})`;
   o.fillRect(0,0,W,H);
-  // feathered mask: keep band only
+  // hard-edge feathered mask (single gradient)
   o.globalCompositeOperation='destination-in';
   const g=o.createLinearGradient(0,bandTop-feather,0,bandTop+feather);
   g.addColorStop(0,'rgba(0,0,0,0)');
